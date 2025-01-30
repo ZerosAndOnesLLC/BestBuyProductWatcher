@@ -4,54 +4,53 @@ use scraper::{Html, Selector};
 use std::time::Duration;
 use tokio::time::sleep;
 use log::{info, error, warn};
-use std::io::Write;
+use std::io::{self, BufRead};
+use std::path::Path;
+use std::fs::File;
 use dotenv::dotenv;
+use std::io::Write;
 
-const PRODUCT_URL: &str = "https://www.bestbuy.com/site/nvidia-geforce-rtx-5090-32gb-gddr7-graphics-card-dark-gun-metal/6614151.p?skuId=6614151";
 const CHECK_INTERVAL: u64 = 30;
 
+struct Product {
+    url: String,
+    last_status: bool,
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
+    
     let env = env_logger::Env::default().filter_or("RUST_LOG", "info");
-    env_logger::Builder::from_env(env)
+    env_logger::Builder::new()
         .format(|buf, record| {
-            writeln!(buf,
+            writeln!(
+                buf,
                 "{} [{}] - {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.level(),
                 record.args()
             )
         })
+        .filter_level(log::LevelFilter::Info)
         .init();
 
-    info!("🔥 Starting Best Buy GPU availability checker...");
+    info!("🔥 Starting Best Buy product availability checker...");
     let client = create_client();
-
-    loop {
-        info!("🔎 Checking product availability...");
-        match check_product_availability(&client).await {
-            Ok(true) => {
-                info!("✅ PRODUCT AVAILABLE! GO BUY IT NOW!!!");
-                send_notification().await;
-            }
-            Ok(false) => info!("❌ Product is still out of stock."),
-            Err(e) => error!("⚠️ Error checking product: {}", e),
-        }
-
-        info!("⏳ Sleeping for {} seconds before next check...", CHECK_INTERVAL);
-        sleep(Duration::from_secs(CHECK_INTERVAL)).await;
-    }
+    check_products(&client).await?;
+    
+    Ok(())
 }
 
 fn create_client() -> Client {
     let mut headers = HeaderMap::new();
-    headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"));
+    headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"));
     headers.insert("accept", HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"));
     headers.insert("accept-language", HeaderValue::from_static("en-US,en;q=0.9"));
+    headers.insert("accept-encoding", HeaderValue::from_static("gzip, deflate, br"));
     headers.insert("cache-control", HeaderValue::from_static("no-cache"));
     headers.insert("pragma", HeaderValue::from_static("no-cache"));
-    headers.insert("sec-ch-ua", HeaderValue::from_static("\"Chromium\";v=\"122\", \"Google Chrome\";v=\"122\", \"Not(A:Brand\";v=\"24\""));
+    headers.insert("sec-ch-ua", HeaderValue::from_static("\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\""));
     headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
     headers.insert("sec-ch-ua-platform", HeaderValue::from_static("\"Windows\""));
     headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
@@ -59,15 +58,59 @@ fn create_client() -> Client {
     headers.insert("sec-fetch-site", HeaderValue::from_static("none"));
     headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
     headers.insert("upgrade-insecure-requests", HeaderValue::from_static("1"));
+    headers.insert("referer", HeaderValue::from_static("https://www.bestbuy.com"));
+    headers.insert("origin", HeaderValue::from_static("https://www.bestbuy.com"));
+    headers.insert("cookie", HeaderValue::from_static("locStoreId=281"));
 
     Client::builder()
+        .gzip(true)
         .default_headers(headers)
+        .timeout(Duration::from_secs(15))
         .build()
         .expect("Failed to create HTTP client")
 }
 
-async fn check_product_availability(client: &Client) -> Result<bool, reqwest::Error> {
-    let response = client.get(PRODUCT_URL).send().await?;
+async fn check_products(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
+    let path = Path::new("products.txt");
+    let file = File::open(path)?;
+    let reader = io::BufReader::new(file);
+    let mut products: Vec<Product> = Vec::new();
+
+    for line in reader.lines() {
+        let url = line?;
+        products.push(Product {
+            url,
+            last_status: false,
+        });
+    }
+
+    loop {
+        for product in &mut products {
+            info!("🔎 Checking product: {}", product.url);
+            
+            match check_single_product(client, &product.url).await {
+                Ok(true) => {
+                    if !product.last_status {
+                        info!("✅ PRODUCT AVAILABLE: {}", product.url);
+                        send_notification_with_url(&product.url).await;
+                        product.last_status = true;
+                    }
+                },
+                Ok(false) => {
+                    product.last_status = false;
+                    info!("❌ Product still out of stock: {}", product.url);
+                },
+                Err(e) => error!("⚠️ Error checking product {}: {}", product.url, e),
+            }
+        }
+
+        info!("⏳ Sleeping for {} seconds before next check...", CHECK_INTERVAL);
+        sleep(Duration::from_secs(CHECK_INTERVAL)).await;
+    }
+}
+
+async fn check_single_product(client: &Client, url: &str) -> Result<bool, reqwest::Error> {
+    let response = client.get(url).send().await?;
     info!("Response status: {}", response.status());
     
     let body = response.text().await?;
@@ -96,19 +139,12 @@ async fn check_product_availability(client: &Client) -> Result<bool, reqwest::Er
     Ok(false)
 }
 
-/* async fn send_notification() {
-    info!("🚀 GO BUY IT NOW! DO NOT WASTE TIME!!!!!! GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO ");
-    // TODO: Implement actual notification logic (Webhook, Email, SMS, etc.)
-} */
-
-async fn send_notification() {
-    info!("🚀 GO BUY IT NOW! DO NOT WASTE TIME!!!!!! GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO ");
-
+async fn send_notification_with_url(url: &str) {
     let config = aws_config::load_from_env().await;
     let client = aws_sdk_sns::Client::new(&config);
 
     let phone = std::env::var("PHONE_NUMBER").expect("PHONE_NUMBER must be set");
-    let msg = "🚨 RTX 5090 IN STOCK! GO BUY NOW: ".to_string() + PRODUCT_URL;
+    let msg = format!("🚨 PRODUCT IN STOCK! GO BUY NOW: GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO {}", url);
 
     match client.publish()
         .phone_number(phone)
