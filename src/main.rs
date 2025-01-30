@@ -72,7 +72,7 @@ fn create_client() -> Client {
 }
 
 async fn check_products(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
-    let path = Path::new("products.txt");
+    let path = Path::new("products.csv");
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
     let mut products: Vec<Product> = Vec::new();
@@ -152,7 +152,7 @@ async fn send_notification_with_details(url: &str, name: &str) {
     let client = aws_sdk_sns::Client::new(&config);
 
     let phone = std::env::var("PHONE_NUMBER").expect("PHONE_NUMBER must be set");
-    let msg = format!("🚨 {} IN STOCK! GO BUY NOW: {}", name, url);
+    let msg = format!("🚨 PRODUCT IN STOCK! GO BUY NOW: GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO {}", url);
 
     match client.publish()
         .phone_number(phone)
