@@ -1,0 +1,15 @@
+[package]
+name = "bb_product_watcher"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "native-tls-vendored", "gzip"] }
+scraper = "0.22.0"
+tokio = { version = "1", features = ["full"] }
+env_logger = "0.11"
+log = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+aws-config = "1.5"
+aws-sdk-sns = "1.58"
+dotenv = "0.15"
