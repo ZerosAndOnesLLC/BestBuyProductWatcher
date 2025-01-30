@@ -4,11 +4,11 @@ Rust-based tool to monitor Best Buy product availability and send SMS notificati
 
 ## Features
 
-- Monitor multiple Best Buy product URLs simultaneously
+- Monitor multiple Best Buy products
 - Real-time availability checking
 - SMS notifications via AWS SNS
 - Configurable check intervals
-- Browser-like request headers to avoid blocking
+- Bot detection avoidance
 - Detailed logging
 
 ## Prerequisites
@@ -19,13 +19,14 @@ Rust-based tool to monitor Best Buy product availability and send SMS notificati
 
 ## Installation
 
-1. Clone the repository:
+1. Clone and build:
 ```bash
-git clone https://github.com/yourusername/bb_product_watcher
+git clone https://github.com/ZerosAndOnesLLC/BestBuyProductWatcher
 cd bb_product_watcher
+cargo build --release
 ```
 
-2. Create a `.env` file:
+2. Create `.env`:
 ```
 RUST_LOG=info
 AWS_REGION=us-west-2
@@ -34,44 +35,28 @@ AWS_SECRET_ACCESS_KEY=your_secret_key
 PHONE_NUMBER=+1234567890
 ```
 
-3. Create `products.txt` with URLs to monitor (one per line):
+3. Create `products.txt` (CSV format):
 ```
-https://www.bestbuy.com/site/product1...
-https://www.bestbuy.com/site/product2...
+https://www.bestbuy.com/site/product-url,Product Name
+https://www.bestbuy.com/site/nvidia-geforce...,RTX 5090 FE
 ```
 
 ## Usage
 
 ```bash
-cargo run
+cargo run --release
 ```
-
-The app will:
-1. Load product URLs from products.txt
-2. Check each product's availability every 30 seconds
-3. Send SMS when a product becomes available
-4. Continue monitoring until stopped
-
-## Configuration
-
-- Edit `CHECK_INTERVAL` in main.rs to modify check frequency
-- Adjust AWS region in .env if needed
-- Modify user agent and headers in create_client() if required
 
 ## AWS Setup
 
-1. Create an AWS account
-2. Set up an IAM user with SNS permissions
+1. Create AWS account
+2. Create IAM user with SNS permissions
 3. Generate access keys
-4. Add keys to .env file
+4. Add to .env file
 
-## Contributing
+## Configuration
 
-1. Fork the repository
-2. Create feature branch
-3. Commit changes
-4. Push to branch
-5. Create Pull Request
+Modify `CHECK_INTERVAL` in main.rs to adjust check frequency (default: 30 seconds).
 
 ## License
 

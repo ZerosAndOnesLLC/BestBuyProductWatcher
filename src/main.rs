@@ -14,6 +14,7 @@ const CHECK_INTERVAL: u64 = 30;
 
 struct Product {
     url: String,
+    name: String,
     last_status: bool,
 }
 
@@ -77,30 +78,37 @@ async fn check_products(client: &Client) -> Result<(), Box<dyn std::error::Error
     let mut products: Vec<Product> = Vec::new();
 
     for line in reader.lines() {
-        let url = line?;
+        let line = line?;
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() != 2 {
+            error!("Invalid line in products.txt: {}", line);
+            continue;
+        }
+        
         products.push(Product {
-            url,
+            url: parts[0].trim().to_string(),
+            name: parts[1].trim().to_string(),
             last_status: false,
         });
     }
 
     loop {
         for product in &mut products {
-            info!("🔎 Checking product: {}", product.url);
+            info!("🔎 Checking product: {}", product.name);
             
             match check_single_product(client, &product.url).await {
                 Ok(true) => {
                     if !product.last_status {
-                        info!("✅ PRODUCT AVAILABLE: {}", product.url);
-                        send_notification_with_url(&product.url).await;
+                        info!("✅ PRODUCT AVAILABLE: {}", product.name);
+                        send_notification_with_details(&product.url, &product.name).await;
                         product.last_status = true;
                     }
                 },
                 Ok(false) => {
                     product.last_status = false;
-                    info!("❌ Product still out of stock: {}", product.url);
+                    info!("❌ Product still out of stock: {}", product.name);
                 },
-                Err(e) => error!("⚠️ Error checking product {}: {}", product.url, e),
+                Err(e) => error!("⚠️ Error checking product {}: {}", product.name, e),
             }
         }
 
@@ -139,12 +147,12 @@ async fn check_single_product(client: &Client, url: &str) -> Result<bool, reqwes
     Ok(false)
 }
 
-async fn send_notification_with_url(url: &str) {
+async fn send_notification_with_details(url: &str, name: &str) {
     let config = aws_config::load_from_env().await;
     let client = aws_sdk_sns::Client::new(&config);
 
     let phone = std::env::var("PHONE_NUMBER").expect("PHONE_NUMBER must be set");
-    let msg = format!("🚨 PRODUCT IN STOCK! GO BUY NOW: GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO GO {}", url);
+    let msg = format!("🚨 {} IN STOCK! GO BUY NOW: {}", name, url);
 
     match client.publish()
         .phone_number(phone)
@@ -152,7 +160,7 @@ async fn send_notification_with_url(url: &str) {
         .send()
         .await 
     {
-        Ok(_) => info!("✅ SMS notification sent successfully!"),
-        Err(e) => error!("❌ Failed to send SMS: {}", e),
+        Ok(_) => info!("✅ SMS notification sent for: {}", name),
+        Err(e) => error!("❌ Failed to send SMS for {}: {}", name, e),
     }
 }
