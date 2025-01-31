@@ -3,7 +3,7 @@ use reqwest::Client;
 use scraper::{Html, Selector};
 use std::time::Duration;
 use tokio::time::sleep;
-use log::{info, error, warn};
+use log::{info, error, warn, debug};
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::fs::File;
@@ -61,7 +61,7 @@ fn create_client() -> Client {
     headers.insert("upgrade-insecure-requests", HeaderValue::from_static("1"));
     headers.insert("referer", HeaderValue::from_static("https://www.bestbuy.com"));
     headers.insert("origin", HeaderValue::from_static("https://www.bestbuy.com"));
-    headers.insert("cookie", HeaderValue::from_static("locStoreId=281"));
+    headers.insert("cookie", HeaderValue::from_static("locStoreId=510"));
 
     Client::builder()
         .gzip(true)
@@ -119,10 +119,10 @@ async fn check_products(client: &Client) -> Result<(), Box<dyn std::error::Error
 
 async fn check_single_product(client: &Client, url: &str) -> Result<bool, reqwest::Error> {
     let response = client.get(url).send().await?;
-    info!("Response status: {}", response.status());
+    debug!("Response status: {}", response.status());
     
     let body = response.text().await?;
-    info!("Response body length: {}", body.len());
+    debug!("Response body length: {}", body.len());
     
     let document = Html::parse_document(&body);
     
